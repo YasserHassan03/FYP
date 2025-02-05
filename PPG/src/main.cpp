@@ -4,34 +4,34 @@
 MAX30105 particleSensor;
 
 void setup() {
-  Serial.begin(115200);
-  Serial.println("Initializing MAX30101 Sensor...");
+  Serial.begin(9600);
+  delay(1000);  
+  Serial.println("Initializing MAX30105 on Wire1...");
 
-  // Initialize the sensor
-  if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) {
-    Serial.println("MAX30101 sensor not found. Please check wiring/power.");
-    while (1);
+  Wire1.setPins(SDA1, SCL1);  
+  Wire1.begin();  
+  
+
+  if (particleSensor.begin(Wire1) == false) {
+    Serial.println("MAX30105 not found on Wire1. Please check your wiring.");
+    while (1);  
   }
 
-  // Configure the sensor
-  particleSensor.setup(); // Default settings
-  particleSensor.setPulseAmplitudeRed(0x0A); // Turn Red LED to low to indicate sensor is running
-  particleSensor.setPulseAmplitudeGreen(0); // Turn off Green LED
-
-  Serial.println("MAX30101 Sensor Initialized!");
+  particleSensor.setup();  
+  Serial.println("MAX30105 initialized on Wire1.");
 }
 
 void loop() {
-  // Read raw PPG data
-  int32_t redValue = particleSensor.getRed();
-  int32_t irValue = particleSensor.getIR();
-
-  // Print the values to the Serial Monitor
-  Serial.print("Red: ");
-  Serial.print(redValue);
-  Serial.print(", IR: ");
-  Serial.println(irValue);
-
-  // Add a small delay to avoid flooding the Serial Monitor
-  delay(100);
+  long irValue = particleSensor.getIR();
+  long redValue = particleSensor.getRed();
+  long greenValue = particleSensor.getGreen();
+  
+  Serial.print("IR: ");
+  Serial.print(irValue);
+  Serial.print(" | Red: ");
+  Serial.println(redValue);
+  Serial.print(" | Green: ");
+  Serial.println(greenValue);
+  
+  delay(100);  
 }
