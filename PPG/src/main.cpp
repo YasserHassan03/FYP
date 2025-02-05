@@ -1,56 +1,37 @@
-/*
-  MAX30105 Breakout: Output all the raw Red/IR/Green readings
-  By: Nathan Seidle @ SparkFun Electronics
-  Date: October 2nd, 2016
-  https://github.com/sparkfun/MAX30105_Breakout
-
-  Outputs all Red/IR/Green values.
-
-  Hardware Connections (Breakoutboard to Arduino):
-  -5V = 5V (3.3V is allowed)
-  -GND = GND
-  -SDA = A4 (or SDA)
-  -SCL = A5 (or SCL)
-  -INT = Not connected
-
-  The MAX30105 Breakout can handle 5V or 3.3V I2C logic. We recommend powering the board with 5V
-  but it will also run at 3.3V.
-
-  This code is released under the [MIT License](http://opensource.org/licenses/MIT).
-*/
-
 #include <Wire.h>
 #include "MAX30105.h"
 
 MAX30105 particleSensor;
 
-#define debug Serial //Uncomment this line if you're using an Uno or ESP
-//#define debug SerialUSB //Uncomment this line if you're using a SAMD21
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Initializing MAX30101 Sensor...");
 
-void setup()
-{
-  debug.begin(9600);
-  debug.println("MAX30105 Basic Readings Example");
-
-  // Initialize sensor
-  if (particleSensor.begin() == false)
-  {
-    debug.println("MAX30105 was not found. Please check wiring/power. ");
+  // Initialize the sensor
+  if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) {
+    Serial.println("MAX30101 sensor not found. Please check wiring/power.");
     while (1);
   }
 
-  particleSensor.setup(); //Configure sensor. Use 6.4mA for LED drive
+  // Configure the sensor
+  particleSensor.setup(); // Default settings
+  particleSensor.setPulseAmplitudeRed(0x0A); // Turn Red LED to low to indicate sensor is running
+  particleSensor.setPulseAmplitudeGreen(0); // Turn off Green LED
+
+  Serial.println("MAX30101 Sensor Initialized!");
 }
 
-void loop()
-{
-  debug.print(" R[");
-  debug.print(particleSensor.getRed());
-  debug.print("] IR[");
-  debug.print(particleSensor.getIR());
-  debug.print("] G[");
-  debug.print(particleSensor.getGreen());
-  debug.print("]");
+void loop() {
+  // Read raw PPG data
+  int32_t redValue = particleSensor.getRed();
+  int32_t irValue = particleSensor.getIR();
 
-  debug.println();
+  // Print the values to the Serial Monitor
+  Serial.print("Red: ");
+  Serial.print(redValue);
+  Serial.print(", IR: ");
+  Serial.println(irValue);
+
+  // Add a small delay to avoid flooding the Serial Monitor
+  delay(100);
 }
