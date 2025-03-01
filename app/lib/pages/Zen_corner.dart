@@ -9,7 +9,8 @@ class ZenCorner extends StatefulWidget {
   State<ZenCorner> createState() => _ZenCornerState();
 }
 
-class _ZenCornerState extends State<ZenCorner> with SingleTickerProviderStateMixin {
+class _ZenCornerState extends State<ZenCorner>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -43,14 +44,11 @@ class _ZenCornerState extends State<ZenCorner> with SingleTickerProviderStateMix
             indicatorColor: Colors.indigoAccent,
             isScrollable: true, // Make tabs scrollable for small screens
             tabs: const [
+              Tab(text: "Sports Psychology", icon: Icon(Icons.psychology)),
               Tab(text: "Meditation", icon: Icon(Icons.self_improvement)),
               Tab(text: "Breathing", icon: Icon(Icons.air)),
               Tab(text: "Physical", icon: Icon(Icons.fitness_center)),
               Tab(text: "Sleep", icon: Icon(Icons.bedtime)),
-              Tab(
-                text: "Sports Psychology",
-                icon: Icon(Icons.psychology),
-              ),
             ],
           ),
         ),
@@ -60,18 +58,47 @@ class _ZenCornerState extends State<ZenCorner> with SingleTickerProviderStateMix
           child: TabBarView(
             controller: _tabController,
             children: [
+                            // Sports Psychology/Education videos
+              VideoCategory(
+                videos: [
+                  VideoItem(
+                    title: "Inside the mind of champion athletes",
+                    videoId: "yG7v4y_xwzQ",
+                    description: "Understanding psychology in sports",
+                  ),
+                  VideoItem(
+                    title: "What gives Elite Athletes the Edge?",
+                    videoId: "Y7J-WvrI4DM",
+                    description:
+                        "Janne Mortensen talks about developing the mind of a winner",
+                  ),
+                  VideoItem(
+                    title: "Motivation to work",
+                    videoId: "jrIS_RQJmCU",
+                    description:
+                        "Andrew Huberman on motivation and productivity",
+                  ),
+                  VideoItem(
+                    title: "How to stay calm under pressure",
+                    videoId: "CqgmozFr_GM",
+                    description: "Lesson by Noa Kageyama and Pen-Pen Chen",
+                  ),
+                ],
+              ),
               // Meditation videos
               VideoCategory(
                 videos: [
                   VideoItem(
                     title: "5-Minute Meditation for Stress Relief",
                     videoId: "inpok4MKVLM",
-                    description: "Quick meditation practice to help you relieve stress",
+                    description:
+                        "Quick meditation practice to help you relieve stress",
                   ),
                   VideoItem(
                     title: "Guided Meditation for Anxiety & Stress",
                     videoId: "O-6f5wQXSu8",
-                    description: "15-minute guided meditation to reduce anxiety",
+                    description:
+                        "15-minute guided meditation to reduce anxiety",
                   ),
                   VideoItem(
                     title: "Mindfulness Meditation",
@@ -144,34 +171,7 @@ class _ZenCornerState extends State<ZenCorner> with SingleTickerProviderStateMix
                 ],
               ),
 
-              // Sports Psychology/Education videos
-              VideoCategory(
-                videos: [
-                  VideoItem(
-                    title: "Inside the mind of champion athletes",
-                    videoId: "yG7v4y_xwzQ",
-                    description: "Understanding psychology in sports",
-                  ),
-                  VideoItem(
-                    title: "What gives Elite Athletes the Edge?",
-                    videoId: "Y7J-WvrI4DM",
-                    description:
-                        "Janne Mortensen talks about developing the mind of a winner",
-                  ),
-                  VideoItem(
-                    title: "Motivation to work",
-                    videoId: "jrIS_RQJmCU",
-                    description:
-                        "Andrew Huberman on motivation and productivity",
-                  ),
-                  VideoItem(
-                    title: "How to stay calm under pressure",
-                    videoId: "CqgmozFr_GM",
-                    description:
-                        "Lesson by Noa Kageyama and Pen-Pen Chen",
-                  ),
-                ],
-              ),
+
             ],
           ),
         ),
@@ -223,9 +223,7 @@ class VideoCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 4,
       shadowColor: Colors.grey[400],
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -235,7 +233,8 @@ class VideoCard extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => VideoPlayerScreen(videoId: video.videoId),
+                  builder:
+                      (context) => VideoPlayerScreen(videoId: video.videoId),
                 ),
               );
             },
@@ -248,15 +247,21 @@ class VideoCard extends StatelessWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: FadeInImage.assetNetwork(
-                      placeholder: 'assets/placeholder.png', // Create a placeholder image in your assets
-                      image: 'https://img.youtube.com/vi/${video.videoId}/0.jpg',
+                      placeholder:
+                          'assets/placeholder.png', // Create a placeholder image in your assets
+                      image:
+                          'https://img.youtube.com/vi/${video.videoId}/0.jpg',
                       fit: BoxFit.cover,
                       imageErrorBuilder: (context, error, stackTrace) {
                         // Return a placeholder on error
                         return Container(
                           color: Colors.grey[300],
                           child: Center(
-                            child: Icon(Icons.video_library, size: 50, color: Colors.grey[600]),
+                            child: Icon(
+                              Icons.video_library,
+                              size: 50,
+                              color: Colors.grey[600],
+                            ),
                           ),
                         );
                       },
@@ -270,7 +275,11 @@ class VideoCard extends StatelessWidget {
                     color: Colors.red,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.play_arrow, color: Colors.white, size: 30),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Colors.white,
+                    size: 30,
+                  ),
                 ),
               ],
             ),
