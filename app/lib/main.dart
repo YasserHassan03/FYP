@@ -1,5 +1,5 @@
-import 'package:app/login_page.dart';
-import 'package:app/main_page.dart';
+import 'package:app/pages/login_page.dart';
+import 'package:app/auth/main_page.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 
