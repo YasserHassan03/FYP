@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>GIDClientID</key>
+	<string>10460434663-3cjcm04mgad4rpphggbde90q73g2ou4l.apps.googleusercontent.com</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -34,7 +36,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<!-- Replace with your Google Client ID reversed -->
-				<string>com.googleusercontent.apps.10460434663-p89cupk6mmbburblja0t7a3m2nipf1a9</string>
+				<string>com.googleusercontent.apps.10460434663-3cjcm04mgad4rpphggbde90q73g2ou4l</string>
 			</array>
 		</dict>
 		<!-- Apple Sign In -->

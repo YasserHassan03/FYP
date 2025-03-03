@@ -39,54 +39,17 @@ class _LoginpageState extends State<Loginpage> {
   }
 
   // Google Sign In
-  Future<void> signInWithGoogle() async {
-    setState(() => _isLoading = true);
+  Future signInWithGoogle() async {
+    final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
 
-    try {
-      // Initialize Google Sign In
-      final GoogleSignIn googleSignIn = GoogleSignIn();
+    final GoogleSignInAuthentication googleAuth =
+        await googleUser!.authentication;
 
-      // Clear any previous sign in
-      await googleSignIn.signOut();
-
-      // Start the interactive sign-in process
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-
-      // If user aborts the sign-in process
-      if (googleUser == null) {
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      // Obtain the auth details from the request
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      // Check if tokens are not null
-      if (googleAuth.accessToken == null || googleAuth.idToken == null) {
-        throw Exception('Missing Google Auth Tokens');
-      }
-
-      // Create a new credential for Firebase
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // Sign in to Firebase with the Google credential
-      await FirebaseAuth.instance.signInWithCredential(credential);
-    } catch (e) {
-      print('Google Sign In Error: ${e.toString()}');
-      // Show error message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error signing in with Google: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+    return await FirebaseAuth.instance.signInWithCredential(credential);
   }
 
   // Apple Sign In
