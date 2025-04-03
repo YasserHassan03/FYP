@@ -54,7 +54,10 @@ bioData body;
 // body.extStatus  - What else is the finger up to?
 // body.rValue     - Blood oxygen correlation coefficient.  
 
-
+// buffers for rr intervals
+#define BUFFER_SIZE 20
+float rrIntervals[BUFFER_SIZE];
+int bufferIndex = 0;
 void setup(){
 
   Serial.begin(115200);
@@ -87,18 +90,42 @@ void setup(){
 
 void loop(){
     body = bioHub.readBpm();
-    Serial.print("Heartrate: ");
-    Serial.println(body.heartRate); 
-    Serial.print("Confidence: ");
-    Serial.println(body.confidence); 
-    Serial.print("Oxygen: ");
-    Serial.println(body.oxygen); 
-    Serial.print("Status: ");
-    Serial.println(body.status); 
-    Serial.print("Extended Status: ");
-    Serial.println(body.extStatus); 
-    // Slow it down or your heart rate will go up trying to keep up
-    // with the flow of numbers
-    delay(1000); 
+    if (body.heartRate > 0) { // Ensure valid heart rate
+      float rrInterval = 60000.0 / body.heartRate; // RR interval in ms
+      rrIntervals[bufferIndex] = rrInterval;
+      bufferIndex = (bufferIndex + 1) % BUFFER_SIZE; // Circular buffer
+  
+      // Calculate HRV (SDNN)
+      float mean = 0;
+      for (int i = 0; i < BUFFER_SIZE; i++) {
+        mean += rrIntervals[i];
+      }
+      mean /= BUFFER_SIZE;
+  
+      float variance = 0;
+      for (int i = 0; i < BUFFER_SIZE; i++) {
+        variance += (rrIntervals[i] - mean) * (rrIntervals[i] - mean);
+      }
+      variance /= BUFFER_SIZE;
+  
+      float sdnn = sqrt(variance); // Standard Deviation of NN intervals
+  
+      // Print results
+      Serial.print("Heartrate: ");
+      Serial.println(body.heartRate);
+      // Serial.print("RR Interval (ms): ");
+      // Serial.println(rrInterval);
+      Serial.print("HRV (SDNN): ");
+      Serial.println(sdnn);
+      Serial.print("Confidence: ");
+      Serial.println(body.confidence); 
+      Serial.print("Oxygen: ");
+      Serial.println(body.oxygen); 
+    } else {
+      Serial.println("Potential Heart attack on the way");
+    }
+  
+
+    delay(2000); 
 
 }
