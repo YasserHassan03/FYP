@@ -1,0 +1,39 @@
+name: CalmPetitor  # Moved this outside the "flutter" section
+description: "A relaxing app to control your nerves"
+publish_to: 'none'  # Keeps the package private
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  firebase_auth: ^5.5.1
+  cloud_firestore: ^5.6.5
+  youtube_player_flutter: ^9.1.1
+  google_sign_in: ^6.2.2
+  sign_in_with_apple: ^6.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  # Uncomment and add assets if needed
+  # assets:
+  #   - images/a_dot_burr.jpeg
+  #   - images/a_dot_ham.jpeg
+
+  # Uncomment and add custom fonts if needed
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
