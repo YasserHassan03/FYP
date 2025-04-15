@@ -1,56 +1,146 @@
-/*
-  MAX30105 Breakout: Output all the raw Red/IR/Green readings
-  By: Nathan Seidle @ SparkFun Electronics
-  Date: October 2nd, 2016
-  https://github.com/sparkfun/MAX30105_Breakout
-
-  Outputs all Red/IR/Green values.
-
-  Hardware Connections (Breakoutboard to Arduino):
-  -5V = 5V (3.3V is allowed)
-  -GND = GND
-  -SDA = A4 (or SDA)
-  -SCL = A5 (or SCL)
-  -INT = Not connected
-
-  The MAX30105 Breakout can handle 5V or 3.3V I2C logic. We recommend powering the board with 5V
-  but it will also run at 3.3V.
-
-  This code is released under the [MIT License](http://opensource.org/licenses/MIT).
-*/
-
+#include <WiFi.h>
+#include <FirebaseESP32.h>
 #include <Wire.h>
-#include "MAX30105.h"
+#include <SparkFun_Bio_Sensor_Hub_Library.h>
+#include "Secrets.h" // Include the secrets.h file with credentials
+#include <time.h>
 
-MAX30105 particleSensor;
+// Reset pin, MFIO pin
+int resPin = 4;
+int mfioPin = 5;
 
-#define debug Serial //Uncomment this line if you're using an Uno or ESP
-//#define debug SerialUSB //Uncomment this line if you're using a SAMD21
+// Takes address, reset pin, and MFIO pin.
+SparkFun_Bio_Sensor_Hub bioHub(resPin, mfioPin);
+
+bioData body;
+
+// Define Firebase Data object
+FirebaseData firebaseData;
+FirebaseConfig config;
+FirebaseAuth auth;
+FirebaseJson json;
+
+// User ID - This would typically be set during device configuration
+String userId = "user123"; // Replace with actual user ID or configuration method
+
+// Unique session ID
+String sessionId;
 
 void setup()
 {
-  debug.begin(9600);
-  debug.println("MAX30105 Basic Readings Example");
+  Serial.begin(115200);
 
-  // Initialize sensor
-  if (particleSensor.begin() == false)
+  // Connect to Wi-Fi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED)
   {
-    debug.println("MAX30105 was not found. Please check wiring/power. ");
-    while (1);
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to Wi-Fi");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  // Initialize Firebase with modern API
+  config.database_url = FIREBASE_HOST;
+  config.signer.tokens.legacy_token = FIREBASE_AUTH;
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
+
+  // Initialize I2C
+  Wire.begin(21, 22); // SDA = GPIO 21, SCL = GPIO 22
+
+  // Initialize Bio Sensor
+  int result = bioHub.begin();
+  if (result == 0)
+    Serial.println("Sensor started!");
+  else
+    Serial.println("Could not communicate with the sensor!");
+
+  Serial.println("Configuring Sensor....");
+  int error = bioHub.configBpm(MODE_TWO); // Configuring just the BPM settings.
+  if (error == 0)
+  { // Zero errors
+    Serial.println("Sensor configured.");
+  }
+  else
+  {
+    Serial.println("Error configuring sensor.");
+    Serial.print("Error: ");
+    Serial.println(error);
   }
 
-  particleSensor.setup(); //Configure sensor. Use 6.4mA for LED drive
+  Serial.println("Loading up the buffer with data....");
+  delay(4000);
+
+  // Sync time via NTP
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  while (time(nullptr) < 100000)
+  {
+    delay(100);
+  }
+
+  time_t now = time(nullptr);
+  char buffer[20];
+  strftime(buffer, sizeof(buffer), "%Y%m%d%H%M%S", localtime(&now));
+  sessionId = String(buffer); // Don't redeclare with 'String' again here
+
+  // Create a new session entry
+  String sessionPath = "/users/" + userId + "/sessions/" + sessionId;
+  json.clear();
+  json.set("startTime", "Session started");
+  json.set("deviceId", WiFi.macAddress());
+  Firebase.setJSON(firebaseData, sessionPath, json);
 }
 
 void loop()
 {
-  debug.print(" R[");
-  debug.print(particleSensor.getRed());
-  debug.print("] IR[");
-  debug.print(particleSensor.getIR());
-  debug.print("] G[");
-  debug.print(particleSensor.getGreen());
-  debug.print("]");
+  // Read data from the sensor
+  body = bioHub.readBpm();
 
-  debug.println();
+  // Check if a finger is detected
+  if (body.status != 3)
+  { // 3 indicates a finger is detected
+    Serial.println("No finger detected. Please place your finger on the sensor.");
+    delay(1000);
+    return;
+  }
+
+  if (body.confidence < 75)
+  {
+    Serial.println("Low confidence in readings. Please adjust finger placement.");
+    delay(1000);
+    return;
+  }
+
+  // Print heart rate, blood oxygen, and confidence
+  Serial.print("Heartrate (BPM): ");
+  Serial.println(body.heartRate);
+  Serial.print("Blood Oxygen (%): ");
+  Serial.println(body.oxygen);
+  Serial.print("Confidence (%): ");
+  Serial.println(body.confidence);
+
+  // Create a JSON object with the reading data
+  json.clear();
+  json.set("heartRate", body.heartRate);
+  json.set("oxygen", body.oxygen);
+  json.set("confidence", body.confidence);
+
+  // Create paths that include the user ID and session ID
+  String readingsPath = "/users/" + userId + "/sessions/" + sessionId + "/readings";
+
+  // Push to Firebase under the user's own data path
+  if (Firebase.pushJSON(firebaseData, readingsPath, json))
+  {
+    Serial.println("Data sent to Firebase successfully");
+  }
+  else
+  {
+    Serial.print("Failed to send data: ");
+    Serial.println(firebaseData.errorReason());
+  }
+
+  delay(1000); // Adjust delay as needed
 }
