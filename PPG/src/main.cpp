@@ -1,6 +1,9 @@
-#include <SparkFun_Bio_Sensor_Hub_Library.h>
+#include <WiFi.h>
+#include <FirebaseESP32.h>
 #include <Wire.h>
-#include <math.h>
+#include <SparkFun_Bio_Sensor_Hub_Library.h>
+#include "Secrets.h" // Include the secrets.h file with credentials
+#include <time.h>
 
 // Reset pin, MFIO pin
 int resPin = 4;
@@ -11,36 +14,58 @@ SparkFun_Bio_Sensor_Hub bioHub(resPin, mfioPin);
 
 bioData body;
 
-// Buffers for HRV and respiratory rate
-#define HRV_BUFFER_SIZE 30
-#define RESP_BUFFER_SIZE 30
-float hrvBuffer[HRV_BUFFER_SIZE];
-float respBuffer[RESP_BUFFER_SIZE];
-int hrvBufferIndex = 0;
-int respBufferIndex = 0;
-int validHRVCount = 0; // Tracks the number of valid HRV intervals in the buffer
-int validRespCount = 0; // Tracks the number of valid respiratory intervals in the buffer
+// Define Firebase Data object
+FirebaseData firebaseData;
+FirebaseConfig config;
+FirebaseAuth auth;
+FirebaseJson json;
 
+// User ID - This would typically be set during device configuration
+String userId = "user123"; // Replace with actual user ID or configuration method
 
-int totalRespirationCycles = 0; // Rolling count of respiration cycles
-unsigned long startTime = 0;    // Start time for respiratory rate calculation
-#define RESPIRATION_WINDOW_MS 20000 
+// Unique session ID
+String sessionId;
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
 
+  // Connect to Wi-Fi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to Wi-Fi");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  // Initialize Firebase with modern API
+  config.database_url = FIREBASE_HOST;
+  config.signer.tokens.legacy_token = FIREBASE_AUTH;
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
+
+  // Initialize I2C
   Wire.begin(21, 22); // SDA = GPIO 21, SCL = GPIO 22
+
+  // Initialize Bio Sensor
   int result = bioHub.begin();
-  if (result == 0) 
+  if (result == 0)
     Serial.println("Sensor started!");
   else
     Serial.println("Could not communicate with the sensor!");
 
   Serial.println("Configuring Sensor....");
   int error = bioHub.configBpm(MODE_TWO); // Configuring just the BPM settings.
-  if (error == 0) { // Zero errors
+  if (error == 0)
+  { // Zero errors
     Serial.println("Sensor configured.");
-  } else {
+  }
+  else
+  {
     Serial.println("Error configuring sensor.");
     Serial.print("Error: ");
     Serial.println(error);
@@ -48,28 +73,44 @@ void setup() {
 
   Serial.println("Loading up the buffer with data....");
   delay(4000);
-  startTime = millis(); // Initialize the start time
+
+  // Sync time via NTP
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  while (time(nullptr) < 100000)
+  {
+    delay(100);
+  }
+
+  time_t now = time(nullptr);
+  char buffer[20];
+  strftime(buffer, sizeof(buffer), "%Y%m%d%H%M%S", localtime(&now));
+  sessionId = String(buffer); // Don't redeclare with 'String' again here
+
+  // Create a new session entry
+  String sessionPath = "/users/" + userId + "/sessions/" + sessionId;
+  json.clear();
+  json.set("startTime", "Session started");
+  json.set("deviceId", WiFi.macAddress());
+  Firebase.setJSON(firebaseData, sessionPath, json);
 }
 
-void loop() {
+void loop()
+{
+  // Read data from the sensor
   body = bioHub.readBpm();
 
   // Check if a finger is detected
-  if (body.status != 3) { // 3 indicates a finger is detected
+  if (body.status != 3)
+  { // 3 indicates a finger is detected
     Serial.println("No finger detected. Please place your finger on the sensor.");
-    memset(hrvBuffer, 0, sizeof(hrvBuffer)); // Clear HRV buffer
-    memset(respBuffer, 0, sizeof(respBuffer)); // Clear respiratory buffer
-    hrvBufferIndex = 0;
-    respBufferIndex = 0;
-    validHRVCount = 0;
-    validRespCount = 0;
-    totalRespirationCycles = 0;
-    startTime = millis(); // Reset the start time
+    delay(1000);
     return;
   }
 
-  if (body.confidence < 75) {
+  if (body.confidence < 75)
+  {
     Serial.println("Low confidence in readings. Please adjust finger placement.");
+    delay(1000);
     return;
   }
 
@@ -81,75 +122,25 @@ void loop() {
   Serial.print("Confidence (%): ");
   Serial.println(body.confidence);
 
+  // Create a JSON object with the reading data
+  json.clear();
+  json.set("heartRate", body.heartRate);
+  json.set("oxygen", body.oxygen);
+  json.set("confidence", body.confidence);
 
-  if (body.heartRate >= 35 && body.heartRate <= 180) { // Valid heart rate range
-    float rrInterval = 60000.0 / body.heartRate; // RR interval in ms
+  // Create paths that include the user ID and session ID
+  String readingsPath = "/users/" + userId + "/sessions/" + sessionId + "/readings";
 
-    // Populate HRV buffer
-    hrvBuffer[hrvBufferIndex] = rrInterval;
-    hrvBufferIndex = (hrvBufferIndex + 1) % HRV_BUFFER_SIZE;
-    if (validHRVCount < HRV_BUFFER_SIZE) {
-      validHRVCount++; // Increment valid HRV count until the buffer is full
-    }
-
-    // Populate respiratory buffer
-    respBuffer[respBufferIndex] = rrInterval;
-    respBufferIndex = (respBufferIndex + 1) % RESP_BUFFER_SIZE;
-    if (validRespCount < RESP_BUFFER_SIZE) {
-      validRespCount++; // Increment valid respiratory count until the buffer is full
-    }
-
-    // Detect respiratory cycles (peaks and troughs in RR intervals)
-    if (validRespCount > 1) {
-      float prevRR = respBuffer[(respBufferIndex - 1 + RESP_BUFFER_SIZE) % RESP_BUFFER_SIZE];
-      float currRR = respBuffer[(respBufferIndex - 2 + RESP_BUFFER_SIZE) % RESP_BUFFER_SIZE];
-      float nextRR = respBuffer[respBufferIndex];
-
-      if (currRR > prevRR && currRR > nextRR) { // Peak detected
-        totalRespirationCycles++;
-      }
-    }
-
-    // Calculate HRV (SDNN) when HRV buffer is full
-    if (validHRVCount == HRV_BUFFER_SIZE) {
-      float mean = 0;
-      for (int i = 0; i < HRV_BUFFER_SIZE; i++) {
-        mean += hrvBuffer[i];
-      }
-      mean /= HRV_BUFFER_SIZE;
-
-      float variance = 0;
-      for (int i = 0; i < HRV_BUFFER_SIZE; i++) {
-        variance += (hrvBuffer[i] - mean) * (hrvBuffer[i] - mean);
-      }
-      variance /= HRV_BUFFER_SIZE;
-
-      float sdnn = sqrt(variance); // Standard Deviation of NN intervals
-
-
-      Serial.print("HRV (SDNN in ms): ");
-      Serial.println(sdnn);
-    }
-
-    // Calculate respiratory rate when respiratory buffer is full
-    unsigned long elapsedTime = millis() - startTime;
-    if (elapsedTime >= RESPIRATION_WINDOW_MS && validRespCount == RESP_BUFFER_SIZE) {
-      int cyclesInWindow = totalRespirationCycles; // Cycles in the current window
-      float respirationRate = (cyclesInWindow / (elapsedTime / 60000.0)); // Breaths per minute
-
-      Serial.print("Respiratory Rate (breaths/min): ");
-      Serial.println(respirationRate);
-
-      // Reset respiratory buffer and variables
-      memset(respBuffer, 0, sizeof(respBuffer)); // Clear respiratory buffer
-      respBufferIndex = 0;
-      validRespCount = 0;
-      totalRespirationCycles = 0;
-      startTime = millis(); // Reset the start time
-    }
-  } else {
-    Serial.println("Invalid heart rate detected. Please check the sensor or finger placement.");
+  // Push to Firebase under the user's own data path
+  if (Firebase.pushJSON(firebaseData, readingsPath, json))
+  {
+    Serial.println("Data sent to Firebase successfully");
+  }
+  else
+  {
+    Serial.print("Failed to send data: ");
+    Serial.println(firebaseData.errorReason());
   }
 
-  delay(1000); 
+  delay(1000); // Adjust delay as needed
 }
