@@ -201,6 +201,11 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
   }
 
   Widget buildGraph(String title, List<FlSpot> data, Color color) {
+    // For oxygen data, filter out zero values
+    final filteredData = title.contains('Oxygen')
+        ? data.where((spot) => spot.y > 0).toList()
+        : data;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -220,7 +225,7 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
               minY: 0,
               lineBarsData: [
                 LineChartBarData(
-                  spots: data.isNotEmpty ? data : [FlSpot(0, 0)],
+                  spots: filteredData.isNotEmpty ? filteredData : [FlSpot(0, 0)],
                   isCurved: true,
                   barWidth: 2,
                   color: color,
@@ -367,6 +372,9 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
                                     as Map<String, dynamic>;
                                 final readings = sessionData['readings']
                                     as Map<dynamic, dynamic>?;
+                                // Check if this session has questionnaire data
+                                final questionnaire = sessionData['questionnaire'] 
+                                    as Map<dynamic, dynamic>?;
 
                                 List<FlSpot> heartRateData = [];
                                 List<FlSpot> oxygenData = [];
@@ -375,40 +383,53 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
                                 // For calculating averages
                                 double totalHeartRate = 0;
                                 double totalOxygen = 0;
-                                int validReadings = 0;
+                                int validHeartRateReadings = 0;
+                                int validOxygenReadings = 0;
 
                                 if (readings != null) {
-                                  readings.forEach((key, value) {
-                                    if (value is Map<dynamic, dynamic>) {
-                                      final reading = value;
-                                      double hr =
-                                          (reading['heartRate'] ?? 0).toDouble();
-                                      double ox =
-                                          (reading['oxygen'] ?? 0).toDouble();
-                                          
-                                      // Only count valid readings for average calculation
-                                      if (hr > 0 && ox > 0) {
-                                        totalHeartRate += hr;
-                                        totalOxygen += ox;
-                                        validReadings++;
-                                      }
+                                  // Sort readings by timestamp (if available) or key
+                                  var sortedReadings = readings.entries.toList()
+                                    ..sort((a, b) => a.key.toString().compareTo(b.key.toString()));
 
-                                      heartRateData.add(
-                                        FlSpot(timeCounter.toDouble(), hr),
-                                      );
-                                      oxygenData.add(
-                                        FlSpot(timeCounter.toDouble(), ox),
-                                      );
+                                  for (var entry in sortedReadings) {
+                                    if (entry.value is Map<dynamic, dynamic>) {
+                                      final reading = entry.value as Map<dynamic, dynamic>;
+                                      double hr = (reading['heartRate'] ?? 0).toDouble();
+                                      double ox = (reading['oxygen'] ?? 0).toDouble();
+                                          
+                                      // Add heart rate data point and count for average
+                                      if (hr > 0) {
+                                        heartRateData.add(FlSpot(timeCounter.toDouble(), hr));
+                                        totalHeartRate += hr;
+                                        validHeartRateReadings++;
+                                      } else {
+                                        // Add a zero point for heart rate if it's invalid
+                                        heartRateData.add(FlSpot(timeCounter.toDouble(), 0));
+                                      }
+                                      
+                                      // Only add oxygen data point if it's greater than zero
+                                      // We still need to increment the counter for ALL readings
+                                      if (ox > 0) {
+                                        oxygenData.add(FlSpot(timeCounter.toDouble(), ox));
+                                        totalOxygen += ox;
+                                        validOxygenReadings++;
+                                      }
+                                      // No else part here - we simply don't add zero oxygen values
+                                      
                                       timeCounter++;
                                     } else {
-                                      print('Skipping invalid reading: $value');
+                                      print('Skipping invalid reading: ${entry.value}');
                                     }
-                                  });
+                                  }
                                 }
                                 
                                 // Calculate averages
-                                double avgHeartRate = validReadings > 0 ? totalHeartRate / validReadings : 0;
-                                double avgOxygen = validReadings > 0 ? totalOxygen / validReadings : 0;
+                                double avgHeartRate = validHeartRateReadings > 0 
+                                    ? totalHeartRate / validHeartRateReadings 
+                                    : 0;
+                                double avgOxygen = validOxygenReadings > 0 
+                                    ? totalOxygen / validOxygenReadings 
+                                    : 0;
 
                                 return Column(
                                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -474,6 +495,63 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
                                       oxygenData,
                                       Colors.blue,
                                     ),
+                                    
+                                    // Display questionnaire data if available - MOVED TO BOTTOM
+                                    if (questionnaire != null) ...[
+                                      const SizedBox(height: 30),
+                                      Card(
+                                        elevation: 4,
+                                        color: Colors.white.withOpacity(0.9),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'Questionnaire Results', // RENAMED
+                                                style: TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 10),
+                                              if (questionnaire.containsKey('stressLevel')) ...[
+                                                Text('Stress Level: ${questionnaire['stressLevel']} / 10'),
+                                                const SizedBox(height: 5),
+                                              ],
+                                              if (questionnaire.containsKey('hadCoffee')) ...[
+                                                Text('Had Coffee: ${questionnaire['hadCoffee'] ? 'Yes' : 'No'}'),
+                                                if (questionnaire['hadCoffee'] == true && 
+                                                    questionnaire.containsKey('coffeeTime')) ...[
+                                                  Text('Coffee Time: ${questionnaire['coffeeTime']}'),
+                                                  const SizedBox(height: 5),
+                                                ],
+                                              ],
+                                              if (questionnaire.containsKey('sleepQuality')) ...[
+                                                Text('Sleep Quality: ${questionnaire['sleepQuality']} / 5'),
+                                                const SizedBox(height: 5),
+                                              ],
+                                              if (questionnaire.containsKey('daysPreCompetition')) ...[
+                                                Text('Days Pre-Competition: ${questionnaire['daysPreCompetition']}'),
+                                                const SizedBox(height: 5),
+                                              ],
+                                              if (questionnaire.containsKey('tookMedication')) ...[
+                                                Text('Took Medication: ${questionnaire['tookMedication'] ? 'Yes' : 'No'}'),
+                                                if (questionnaire['tookMedication'] == true && 
+                                                    questionnaire.containsKey('medications')) ...[
+                                                  Text('Medications: ${questionnaire['medications']}'),
+                                                  const SizedBox(height: 5),
+                                                ],
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 20), // Add space after questionnaire
+                                    ],
                                   ],
                                 );
                               },
