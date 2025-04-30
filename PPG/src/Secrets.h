@@ -1,5 +1,7 @@
-#define WIFI_SSID "Hassan_IoT"      // Replace with your actual WiFi network name
-#define WIFI_PASSWORD "74780305"     // Replace with your actual WiFi password
+#define WIFI_SSID "Imperial-WPA" 
+#define WIFI_USERNAME "yh4021"
+#define WIFI_PASSWORD "Qujzoq-6hudzo-wijkyk"    // Replace with your actual WiFi network name
+    // Replace with your actual WiFi password
 
 // Firebase project settings
 #define FIREBASE_HOST "fyp2025-d8a2a-default-rtdb.firebaseio.com"  // Your Firebase database URL
