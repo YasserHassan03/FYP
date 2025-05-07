@@ -1,6 +1,9 @@
 #define WIFI_SSID "Imperial-WPA" 
 #define WIFI_USERNAME "yh4021"
-#define WIFI_PASSWORD "Qujzoq-6hudzo-wijkyk"    // Replace with your actual WiFi network name
+#define WIFI_PASSWORD "Qujzoq-6hudzo-wijkyk" 
+
+#define iphoneName "Dave"
+#define iphonePassword "0123456789"// Replace with your actual WiFi network name
     // Replace with your actual WiFi password
 
 // Firebase project settings
