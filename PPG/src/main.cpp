@@ -1,28 +1,21 @@
+#define LOG_LOCAL_LEVEL ESP_LOG_WARN
+#include "esp_log.h"
 #include <Arduino.h>
-#include <WiFi.h>
-#include <esp_wpa2.h>
-#include <FirebaseESP32.h>
 #include <Wire.h>
 #include <MAX30105.h>
 #include <spo2_algorithm.h>
-#include "Secrets.h" // WiFi/Firebase credentials
-
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
+#include <BLE2902.h>
 
 #define SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
-#define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+#define RX_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e" // Write (App -> ESP)
+#define TX_CHAR_UUID "6e400003-b5a3-f393-e0a9-e50e24dcca9e" // Notify (ESP -> App)
 
 MAX30105 particleSensor;
 
-// Firebase
-FirebaseData firebaseData;
-FirebaseConfig config;
-FirebaseAuth auth;
-FirebaseJson json;
-
-// Sensor variables
+// Sensor variables (same as before)
 const byte RATE_SIZE = 15;
 float rates[RATE_SIZE];
 byte rateSpot = 0;
@@ -54,14 +47,8 @@ static float pulseMin = 0, pulseMax = 0;
 static unsigned long pulseMinTime = 0;
 static unsigned long pulseMaxTime = 0;
 
-// Session info
-String userId = "";
-String sessionId = "";
-unsigned long lastSendTime = 0;
-
-// BLE globals
-BLECharacteristic *pCharacteristic;
-String bleCommand = "";
+BLECharacteristic *txCharacteristic;
+BLECharacteristic *rxCharacteristic;
 
 void resetHRValues();
 float calculateSessionHRV();
@@ -74,35 +61,31 @@ class CommandCallbacks : public BLECharacteristicCallbacks
     std::string value = pCharacteristic->getValue();
     if (value.length() > 0)
     {
-      bleCommand = String(value.c_str());
+      String bleCommand = String(value.c_str());
       Serial.print("Received BLE command: ");
+      delay(10);
       Serial.println(bleCommand);
+      delay(10);
       if (bleCommand.startsWith("START"))
       {
-        int firstSpace = bleCommand.indexOf(' ');
-        int secondSpace = bleCommand.indexOf(' ', firstSpace + 1);
-        userId = bleCommand.substring(firstSpace + 1, secondSpace);
-        sessionId = bleCommand.substring(secondSpace + 1);
         recording = true;
         resetHRValues();
         ppgPeakCount = 0;
         ppgRRCount = 0;
         lastPPGPeakTime = 0;
-
-        // Create a new session in Firebase
-        String sessionPath = "/users/" + userId + "/sessions/" + sessionId;
-        json.clear();
-        json.set("startTime", String(millis()));
-        Firebase.setJSON(firebaseData, sessionPath, json);
-        Serial.println("New session started: " + sessionId);
+        Serial.println("Session started.");
+        delay(10);
       }
       else if (bleCommand.startsWith("STOP"))
       {
         recording = false;
         sessionHRV = calculateSessionHRV();
-        String qPath = "/users/" + userId + "/sessions/" + sessionId + "/questionnaire/hrv";
-        Firebase.setFloat(firebaseData, qPath, sessionHRV);
         Serial.println("Session stopped.");
+        delay(10);
+        // Optionally, send HRV summary to app
+        String summary = String("{\"hrv\":") + String(sessionHRV, 2) + "}";
+        txCharacteristic->setValue(summary.c_str());
+        txCharacteristic->notify();
       }
     }
   }
@@ -110,57 +93,35 @@ class CommandCallbacks : public BLECharacteristicCallbacks
 
 void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(230400);
+  delay(1000);
+  Serial.println("Before BLE setup...");
+  delay(1000);
 
   // BLE setup
-  BLEDevice::init("ESP32-PPG"); // BLE device name
+  BLEDevice::init("ESP32-PPG");
+  delay(10000);
   BLEServer *pServer = BLEDevice::createServer();
   BLEService *pService = pServer->createService(SERVICE_UUID);
-  pCharacteristic = pService->createCharacteristic(
-      CHARACTERISTIC_UUID,
+
+  rxCharacteristic = pService->createCharacteristic(
+      RX_CHAR_UUID,
       BLECharacteristic::PROPERTY_WRITE);
-  pCharacteristic->setCallbacks(new CommandCallbacks());
+  rxCharacteristic->setCallbacks(new CommandCallbacks());
+
+  txCharacteristic = pService->createCharacteristic(
+      TX_CHAR_UUID,
+      BLECharacteristic::PROPERTY_NOTIFY);
+  txCharacteristic->addDescriptor(new BLE2902());
+
   pService->start();
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06); // iOS compatibility
+  pAdvertising->setMinPreferred(0x06);
   pAdvertising->setMinPreferred(0x12);
   pAdvertising->start();
   Serial.println("BLE device started, waiting for commands...");
-
-  // WPA2 Enterprise WiFi setup
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_STA);
-  esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)WIFI_USERNAME, strlen(WIFI_USERNAME));
-  esp_wifi_sta_wpa2_ent_set_username((uint8_t *)WIFI_USERNAME, strlen(WIFI_USERNAME));
-  esp_wifi_sta_wpa2_ent_set_password((uint8_t *)WIFI_PASSWORD, strlen(WIFI_PASSWORD));
-  esp_wifi_sta_wpa2_ent_enable();
-  WiFi.begin(WIFI_SSID);
-
-  Serial.print("Connecting to WiFi");
-  unsigned long startAttemptTime = millis();
-  const unsigned long timeout = 10000;
-
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout)
-  {
-    delay(500);
-    Serial.print(".");
-  }
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    Serial.println("\nConnected to WiFi");
-    Serial.println("IP Address: " + WiFi.localIP().toString());
-  }
-  else
-  {
-    Serial.println("\nFailed to connect to WiFi. Continuing without WiFi...");
-  }
-
-  // Firebase setup
-  config.database_url = FIREBASE_HOST;
-  config.signer.tokens.legacy_token = FIREBASE_AUTH;
-  Firebase.begin(&config, &auth);
-  Firebase.reconnectWiFi(true);
+  delay(10);
 
   // Sensor setup
   Wire.begin(21, 22);
@@ -175,39 +136,13 @@ void setup()
 
 void loop()
 {
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    Serial.println("WiFi disconnected. Attempting to reconnect...");
-    WiFi.disconnect();
-    WiFi.begin(WIFI_SSID);
-
-    // Wait for reconnection
-    int retryCount = 0;
-    while (WiFi.status() != WL_CONNECTED && retryCount < 20)
-    { // Retry up to 20 times
-      delay(500);
-      Serial.print(".");
-      retryCount++;
-    }
-
-    if (WiFi.status() == WL_CONNECTED)
-    {
-      Serial.println("\nReconnected to WiFi");
-      Serial.println("IP Address: " + WiFi.localIP().toString());
-    }
-    else
-    {
-      Serial.println("\nFailed to reconnect to WiFi");
-    }
-  }
-
   if (!recording)
   {
     delay(100);
     return;
   }
 
-  // Sensor reading and filtering
+  // Sensor reading and filtering (same as before)
   long irValue = particleSensor.getIR();
   long redValue = particleSensor.getRed();
   irFiltered = filterValue(irValue, irPrevious);
@@ -215,7 +150,7 @@ void loop()
   irPrevious = irFiltered;
   redPrevious = redFiltered;
 
-  // Peak detection for HR/HRV
+  // Peak detection for HR/HRV (same as before)
   static long prev1 = 0, prev2 = 0;
   static unsigned long lastPeakTime = 0;
   if (prev2 < prev1 && prev1 > irFiltered && prev1 > 50000)
@@ -256,7 +191,7 @@ void loop()
   prev2 = prev1;
   prev1 = irFiltered;
 
-  // BP estimation
+  // BP estimation (same as before)
   if (!wasRising && irFiltered > prevFiltered)
   {
     pulseMin = prevFiltered;
@@ -274,49 +209,48 @@ void loop()
     float heartRate = filteredBPM;
     float estimatedSBP = 120 + (pulseAmplitude * 0.005) - (pulseWidth * 0.05) + (heartRate * 0.2);
     float estimatedDBP = 80 + (pulseAmplitude * 0.002) - (pulseWidth * 0.02) + (heartRate * 0.1);
-    if (millis() - lastSendTime > 1000)
+
+    // Send live data to app via BLE
+
+      String data = String("{\"heartRate\":") + String(filteredBPM, 1) +
+                    ",\"avgHeartRate\":" + String(beatAvg, 1) +
+                    ",\"sbp\":" + String(estimatedSBP, 1) +
+                    ",\"dbp\":" + String(estimatedDBP, 1) +
+                    ",\"oxygen\":" + String(spo2) +
+                    ",\"timestamp\":" + String(millis()) + "}";
+      txCharacteristic->setValue(data.c_str());
+      txCharacteristic->notify();
+      Serial.println("Data sent to app: " + data);
+
+    prevFiltered = irFiltered;
+
+    // SpO2 calculation (same as before)
+    if (millis() - lastSampleTime > 10)
     {
-      lastSendTime = millis();
-      if (userId.length() > 0 && sessionId.length() > 0)
+      lastSampleTime = millis();
+      irBuffer[sampleCounter] = irFiltered;
+      redBuffer[sampleCounter] = redFiltered;
+      sampleCounter++;
+      if (sampleCounter >= 100)
       {
-        String path = "/users/" + userId + "/sessions/" + sessionId + "/readings";
-        json.clear();
-        json.set("heartRate", filteredBPM);
-        json.set("avgHeartRate", beatAvg);
-        json.set("sbp", estimatedSBP);
-        json.set("dbp", estimatedDBP);
-        json.set("oxygen", spo2);
-        json.set("timestamp", millis());
-        Firebase.pushJSON(firebaseData, path, json);
+        needSpO2Update = true;
+        sampleCounter = 0;
       }
     }
-  }
-  prevFiltered = irFiltered;
-
-  // SpO2 calculation
-  if (millis() - lastSampleTime > 10)
-  {
-    lastSampleTime = millis();
-    irBuffer[sampleCounter] = irFiltered;
-    redBuffer[sampleCounter] = redFiltered;
-    sampleCounter++;
-    if (sampleCounter >= 100)
+    if (needSpO2Update && millis() - lastSpO2Update > 1000)
     {
-      needSpO2Update = true;
-      sampleCounter = 0;
+      int32_t tempHeartRate;
+      int8_t tempHRvalid;
+      maxim_heart_rate_and_oxygen_saturation(irBuffer, bufferLength, redBuffer,
+                                             &spo2, &validSPO2, &tempHeartRate, &tempHRvalid);
+      lastSpO2Update = millis();
+      needSpO2Update = false;
     }
-  }
-  if (needSpO2Update && millis() - lastSpO2Update > 1000)
-  {
-    int32_t tempHeartRate;
-    int8_t tempHRvalid;
-    maxim_heart_rate_and_oxygen_saturation(irBuffer, bufferLength, redBuffer,
-                                           &spo2, &validSPO2, &tempHeartRate, &tempHRvalid);
-    lastSpO2Update = millis();
-    needSpO2Update = false;
+    delay(10); // Keep sampling interval similar to original code
   }
 }
 
+// Move these functions outside the loop
 void resetHRValues()
 {
   beatsPerMinute = 0;
