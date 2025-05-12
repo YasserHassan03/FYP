@@ -93,9 +93,15 @@ class _LiveSensorDataState extends State<LiveSensorData> {
   void onBleData(List<int> value) {
     try {
       final jsonStr = utf8.decode(value);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("BLE: $jsonStr"),
+          duration: Duration(seconds: 5),
+        ),
+      );
       final data = json.decode(jsonStr);
       readingsCount++;
-      if(readingsCount <= 0)return;
+      if (readingsCount <= 0) return;
       setState(() {
         readings.add(data);
         double hr = (data['heartRate'] ?? 0).toDouble();
@@ -139,9 +145,10 @@ class _LiveSensorDataState extends State<LiveSensorData> {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null && sessionId.isNotEmpty) {
         final db = FirebaseDatabase.instance.ref();
-        final readingsPath =
-            "users/${user.uid}/sessions/$sessionId/readings";
-        db.child(readingsPath).push().set(data);
+        final readingsPath = "users/${user.uid}/sessions/$sessionId/readings";
+        if (!data.containsKey('hrv')) {
+          db.child(readingsPath).push().set(data);
+        }
       }
     } catch (e) {
       // Ignore parse errors
@@ -192,7 +199,6 @@ class _LiveSensorDataState extends State<LiveSensorData> {
       await sendBleCommand("STOP");
       _showPostSessionQuestionnaire();
       uploadSessionToFirebase();
-   
     }
   }
 

@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include <Arduino.h>
 #include <Wire.h>
+#undef I2C_BUFFER_LENGTH // Fix redefinition warning
 #include <MAX30105.h>
 #include <spo2_algorithm.h>
 #include <BLEDevice.h>
@@ -15,7 +16,7 @@
 
 MAX30105 particleSensor;
 
-// Sensor variables (same as before)
+// Sensor variables
 const byte RATE_SIZE = 15;
 float rates[RATE_SIZE];
 byte rateSpot = 0;
@@ -50,6 +51,8 @@ static unsigned long pulseMaxTime = 0;
 BLECharacteristic *txCharacteristic;
 BLECharacteristic *rxCharacteristic;
 
+unsigned long lastDataSentTime = 0; // Track the last time data was sent
+
 void resetHRValues();
 float calculateSessionHRV();
 long filterValue(long newValue, long prevValue);
@@ -82,7 +85,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks
         sessionHRV = calculateSessionHRV();
         Serial.println("Session stopped.");
         delay(10);
-        // Optionally, send HRV summary to app
+        // Send HRV summary to app
         String summary = String("{\"hrv\":") + String(sessionHRV, 2) + "}";
         txCharacteristic->setValue(summary.c_str());
         txCharacteristic->notify();
@@ -142,7 +145,11 @@ void loop()
     return;
   }
 
-  // Sensor reading and filtering (same as before)
+  // Declare pulse variables at the beginning of the loop
+  float pulseAmplitude = 0;
+  float pulseWidth = 0;
+
+  // Sensor reading and filtering
   long irValue = particleSensor.getIR();
   long redValue = particleSensor.getRed();
   irFiltered = filterValue(irValue, irPrevious);
@@ -150,7 +157,7 @@ void loop()
   irPrevious = irFiltered;
   redPrevious = redFiltered;
 
-  // Peak detection for HR/HRV (same as before)
+  // Peak detection for HR/HRV
   static long prev1 = 0, prev2 = 0;
   static unsigned long lastPeakTime = 0;
   if (prev2 < prev1 && prev1 > irFiltered && prev1 > 50000)
@@ -191,7 +198,7 @@ void loop()
   prev2 = prev1;
   prev1 = irFiltered;
 
-  // BP estimation (same as before)
+  // BP estimation
   if (!wasRising && irFiltered > prevFiltered)
   {
     pulseMin = prevFiltered;
@@ -204,53 +211,53 @@ void loop()
     pulseMax = prevFiltered;
     pulseMaxTime = millis();
     wasRising = false;
-    float pulseAmplitude = pulseMax - pulseMin;
-    float pulseWidth = pulseMaxTime - pulseStartTime;
-    float heartRate = filteredBPM;
-    float estimatedSBP = 120 + (pulseAmplitude * 0.005) - (pulseWidth * 0.05) + (heartRate * 0.2);
-    float estimatedDBP = 80 + (pulseAmplitude * 0.002) - (pulseWidth * 0.02) + (heartRate * 0.1);
+    pulseAmplitude = pulseMax - pulseMin;
+    pulseWidth = pulseMaxTime - pulseMinTime;
+  }
 
-    // Send live data to app via BLE
-
-      String data = String("{\"heartRate\":") + String(filteredBPM, 1) +
-                    ",\"avgHeartRate\":" + String(beatAvg, 1) +
-                    ",\"sbp\":" + String(estimatedSBP, 1) +
-                    ",\"dbp\":" + String(estimatedDBP, 1) +
-                    ",\"oxygen\":" + String(spo2) +
-                    ",\"timestamp\":" + String(millis()) + "}";
-      txCharacteristic->setValue(data.c_str());
-      txCharacteristic->notify();
-      Serial.println("Data sent to app: " + data);
-
-    prevFiltered = irFiltered;
-
-    // SpO2 calculation (same as before)
-    if (millis() - lastSampleTime > 10)
+  // SpO2 calculation
+  if (millis() - lastSampleTime > 10)
+  {
+    lastSampleTime = millis();
+    irBuffer[sampleCounter] = irFiltered;
+    redBuffer[sampleCounter] = redFiltered;
+    sampleCounter++;
+    if (sampleCounter >= 100)
     {
-      lastSampleTime = millis();
-      irBuffer[sampleCounter] = irFiltered;
-      redBuffer[sampleCounter] = redFiltered;
-      sampleCounter++;
-      if (sampleCounter >= 100)
-      {
-        needSpO2Update = true;
-        sampleCounter = 0;
-      }
+      needSpO2Update = true;
+      sampleCounter = 0;
     }
-    if (needSpO2Update && millis() - lastSpO2Update > 1000)
-    {
-      int32_t tempHeartRate;
-      int8_t tempHRvalid;
-      maxim_heart_rate_and_oxygen_saturation(irBuffer, bufferLength, redBuffer,
-                                             &spo2, &validSPO2, &tempHeartRate, &tempHRvalid);
-      lastSpO2Update = millis();
-      needSpO2Update = false;
-    }
-    delay(10); // Keep sampling interval similar to original code
+  }
+  if (needSpO2Update && millis() - lastSpO2Update > 1000)
+  {
+    int32_t tempHeartRate;
+    int8_t tempHRvalid;
+    maxim_heart_rate_and_oxygen_saturation(irBuffer, bufferLength, redBuffer,
+                                           &spo2, &validSPO2, &tempHeartRate, &tempHRvalid);
+    lastSpO2Update = millis();
+    needSpO2Update = false;
+  }
+
+  // --- SEND DATA EVERY SECOND, NO MATTER WHAT ---
+  unsigned long currentTime = millis();
+  if (currentTime - lastDataSentTime >= 1000)
+  {
+    float estimatedSBP = 120 + (pulseAmplitude * 0.005) - (pulseWidth * 0.05) + (filteredBPM * 0.2);
+    float estimatedDBP = 80 + (pulseAmplitude * 0.002) - (pulseWidth * 0.02) + (filteredBPM * 0.1);
+
+    String data = String("{\"heartRate\":") + String(filteredBPM, 1) +
+                  ",\"avgHeartRate\":" + String(beatAvg, 1) +
+                  ",\"sbp\":" + String(estimatedSBP, 1) +
+                  ",\"dbp\":" + String(estimatedDBP, 1) +
+                  ",\"oxygen\":" + String(spo2) +
+                  ",\"timestamp\":" + String(millis()) + "}";
+    txCharacteristic->setValue(data.c_str());
+    txCharacteristic->notify();
+    Serial.println("Data sent to app: " + data);
+
+    lastDataSentTime = currentTime;
   }
 }
-
-// Move these functions outside the loop
 void resetHRValues()
 {
   beatsPerMinute = 0;
