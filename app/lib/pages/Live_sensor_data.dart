@@ -43,6 +43,8 @@ class _LiveSensorDataState extends State<LiveSensorData> {
   final String rxCharUuid = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
   final String txCharUuid = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 
+  DateTime? sessionStartTime;
+
   @override
   void dispose() {
     notifySub?.cancel();
@@ -92,6 +94,11 @@ class _LiveSensorDataState extends State<LiveSensorData> {
 
   void onBleData(List<int> value) {
     try {
+      // Ignore first 3 seconds of data after session start
+      if (sessionStartTime != null &&
+          DateTime.now().difference(sessionStartTime!).inSeconds < 3) {
+        return;
+      }
       final jsonStr = utf8.decode(value);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -190,6 +197,7 @@ class _LiveSensorDataState extends State<LiveSensorData> {
         oxygenData.clear();
         chartTime = 0;
         readingsCount = 0;
+        sessionStartTime = DateTime.now();
       });
       await sendBleCommand("START");
     } else {

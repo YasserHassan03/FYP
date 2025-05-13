@@ -197,12 +197,12 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
                     borderRadius: BorderRadius.circular(18),
                     boxShadow: [
                       BoxShadow(
-                        color: metric.color.withOpacity(0.08),
+                        color: Colors.black87.withOpacity(0.08),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
                     ],
-                    border: Border.all(color: metric.color.withOpacity(0.18)),
+                    border: Border.all(color: Colors.black87.withOpacity(0.18)),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -214,7 +214,7 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
-                          color: metric.color,
+                          color: Colors.black87,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -227,7 +227,7 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: metric.color,
+                              color: Colors.black87,
                             ),
                           ),
                           const SizedBox(width: 3),
@@ -235,7 +235,7 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
                             metric.unit,
                             style: TextStyle(
                               fontSize: 13,
-                              color: metric.color,
+                              color: Colors.black87,
                             ),
                           ),
                         ],
