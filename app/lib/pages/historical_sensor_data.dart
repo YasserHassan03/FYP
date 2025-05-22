@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 
 class HistoricalSensorData extends StatefulWidget {
   const HistoricalSensorData({Key? key}) : super(key: key);
@@ -16,11 +17,25 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
   Map<String, dynamic> historicalData = {};
   bool isLoading = true;
   String? selectedSessionId;
+  Timer? _pollingTimer;
 
   @override
   void initState() {
     super.initState();
     fetchHistoricalData();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      fetchHistoricalData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel(); // Cancel the timer
+    super.dispose();
   }
 
   Future<void> fetchHistoricalData() async {
@@ -132,6 +147,7 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
     required double avgSbp,
     required double avgDbp,
     required double sessionHRV,
+    required double stressScore, // Add stress score
   }) {
     final List<_ScoreMetric> metrics = [
       _ScoreMetric(
@@ -171,6 +187,18 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
         value: sessionHRV,
         unit: 'ms',
       ),
+      _ScoreMetric(
+        icon: Icons.self_improvement,
+        color:
+            stressScore < 3.5
+                ? Colors.green
+                : (stressScore < 6.5 ? Colors.orange : Colors.red),
+        label: 'Stress',
+        value: stressScore,
+        unit: '',
+        desc:
+            stressScore < 3.5 ? 'Low' : (stressScore < 6.5 ? 'Medium' : 'High'),
+      ),
     ];
 
     return Card(
@@ -187,76 +215,85 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
               spacing: 16,
               runSpacing: 16,
               alignment: WrapAlignment.center,
-              children: metrics.map((metric) {
-                return Container(
-                  width: itemWidth,
-                  constraints: const BoxConstraints(minWidth: 120, maxWidth: 180),
-                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black87.withOpacity(0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+              children:
+                  metrics.map((metric) {
+                    return Container(
+                      width: itemWidth,
+                      constraints: const BoxConstraints(
+                        minWidth: 120,
+                        maxWidth: 180,
                       ),
-                    ],
-                    border: Border.all(color: Colors.black87.withOpacity(0.18)),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(metric.icon, color: metric.color, size: 26),
-                      const SizedBox(height: 6),
-                      Text(
-                        metric.label,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: Colors.black87,
-                        ),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 8,
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            metric.value.toStringAsFixed(1),
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            metric.unit,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.black87,
-                            ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black87.withOpacity(0.08),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
                         ],
-                      ),
-                      if (metric.desc != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            metric.desc!,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontStyle: FontStyle.italic,
-                              color: Colors.grey,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
+                        border: Border.all(
+                          color: Colors.black87.withOpacity(0.18),
                         ),
-                    ],
-                  ),
-                );
-              }).toList(),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(metric.icon, color: metric.color, size: 26),
+                          const SizedBox(height: 6),
+                          Text(
+                            metric.label,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                metric.value.toStringAsFixed(1),
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                metric.unit,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (metric.desc != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                metric.desc!,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic,
+                                  color: Colors.grey,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
             );
           },
         ),
@@ -269,6 +306,22 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
         title.contains('Oxygen')
             ? data.where((spot) => spot.y > 0).toList()
             : data;
+    double minY =
+        filteredData.isNotEmpty
+            ? filteredData.map((spot) => spot.y).reduce((a, b) => a < b ? a : b)
+            : 0;
+    double maxY =
+        filteredData.isNotEmpty
+            ? filteredData.map((spot) => spot.y).reduce((a, b) => a > b ? a : b)
+            : 0;
+    if (minY == maxY) {
+      minY -= 5;
+      maxY += 5;
+    } else {
+      double padding = (maxY - minY) * 0.1; // Add 10% padding
+      minY -= padding;
+      maxY += padding;
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -285,7 +338,8 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
           height: 200,
           child: LineChart(
             LineChartData(
-              minY: 0,
+              minY: minY,
+              maxY: maxY,
               lineBarsData: [
                 LineChartBarData(
                   spots:
@@ -344,9 +398,7 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
     return Card(
       elevation: 6,
       color: Colors.white.withOpacity(0.97),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
@@ -354,7 +406,11 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
           children: [
             Row(
               children: const [
-                Icon(Icons.assignment_turned_in, color: Colors.blueGrey, size: 22),
+                Icon(
+                  Icons.assignment_turned_in,
+                  color: Colors.blueGrey,
+                  size: 22,
+                ),
                 SizedBox(width: 8),
                 Text(
                   'Questionnaire Results',
@@ -370,7 +426,11 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
             if (questionnaire.containsKey('stressLevel')) ...[
               Row(
                 children: [
-                  const Icon(Icons.self_improvement, color: Colors.orange, size: 20),
+                  const Icon(
+                    Icons.self_improvement,
+                    color: Colors.orange,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Stress Level:',
@@ -401,7 +461,11 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
                   padding: const EdgeInsets.only(left: 32, top: 2),
                   child: Row(
                     children: [
-                      Icon(Icons.access_time, color: Colors.brown[200], size: 18),
+                      Icon(
+                        Icons.access_time,
+                        color: Colors.brown[200],
+                        size: 18,
+                      ),
                       const SizedBox(width: 6),
                       Text('Time: ${questionnaire['coffeeTime']}'),
                     ],
@@ -462,7 +526,9 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
                       Icon(Icons.list, color: Colors.purple[200], size: 18),
                       const SizedBox(width: 6),
                       Flexible(
-                        child: Text('Medications: ${questionnaire['medications']}'),
+                        child: Text(
+                          'Medications: ${questionnaire['medications']}',
+                        ),
                       ),
                     ],
                   ),
@@ -503,287 +569,291 @@ class _HistoricalSensorDataState extends State<HistoricalSensorData> {
             end: Alignment.bottomCenter,
           ),
         ),
-        child: isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              )
-            : historicalData.isEmpty || sessionsWithData.isEmpty
+        child:
+            isLoading
                 ? const Center(
-                    child: Text(
-                      'No Historical Data Available',
-                      style: TextStyle(fontSize: 18, color: Colors.white),
-                    ),
-                  )
+                  child: CircularProgressIndicator(color: Colors.white),
+                )
+                : historicalData.isEmpty || sessionsWithData.isEmpty
+                ? const Center(
+                  child: Text(
+                    'No Historical Data Available',
+                    style: TextStyle(fontSize: 18, color: Colors.white),
+                  ),
+                )
                 : Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 0,
-                        vertical: 32,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 18.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const SizedBox(height: 32),
-                            Column(
-                              children: [
-                                Text(
-                                  '📊 Historical Sensor',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                    letterSpacing: 1.2,
-                                  ),
-                                  textAlign: TextAlign.center,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 0,
+                      vertical: 32,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 18.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const SizedBox(height: 32),
+                          Column(
+                            children: [
+                              Text(
+                                '📊 Historical Sensor',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 1.2,
                                 ),
-                                Text(
-                                  'Data',
-                                  style: TextStyle(
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                    letterSpacing: 1.2,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 24),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 8,
+                                textAlign: TextAlign.center,
                               ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
+                              Text(
+                                'Data',
+                                style: TextStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 1.2,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: selectedSessionId,
+                                hint: const Text(
+                                  'Select a Session',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                dropdownColor: Colors.blueGrey[800],
                                 borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: selectedSessionId,
-                                  hint: const Text(
-                                    'Select a Session',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  dropdownColor: Colors.blueGrey[800],
-                                  borderRadius: BorderRadius.circular(16),
-                                  icon: const Icon(
-                                    Icons.keyboard_arrow_down,
-                                    color: Colors.white,
-                                  ),
-                                  items: sessionsWithData.map((sessionId) {
-                                    return DropdownMenuItem<String>(
-                                      value: sessionId,
-                                      child: Text(
-                                        formatSessionId(sessionId),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      selectedSessionId = value;
-                                    });
-                                  },
+                                icon: const Icon(
+                                  Icons.keyboard_arrow_down,
+                                  color: Colors.white,
                                 ),
-                              ),
-                            ),
-                            const SizedBox(height: 28),
-                            if (selectedSessionId != null)
-                              Builder(
-                                builder: (context) {
-                                  final sessionData =
-                                      historicalData[selectedSessionId!]
-                                          as Map<String, dynamic>;
-                                  final readings =
-                                      sessionData['readings']
-                                          as Map<dynamic, dynamic>?;
-                                  final questionnaire =
-                                      sessionData['questionnaire']
-                                          as Map<dynamic, dynamic>?;
-
-                                  List<FlSpot> heartRateData = [];
-                                  List<FlSpot> oxygenData = [];
-                                  List<FlSpot> sbpData = [];
-                                  List<FlSpot> dbpData = [];
-                                  int timeCounter = 0;
-
-                                  double totalHeartRate = 0,
-                                      totalOxygen = 0,
-                                      totalSbp = 0,
-                                      totalDbp = 0;
-                                  int validHeartRateReadings = 0,
-                                      validOxygenReadings = 0,
-                                      validSbpReadings = 0,
-                                      validDbpReadings = 0;
-
-                                  if (readings != null) {
-                                    var sortedReadings =
-                                        readings.entries.toList()
-                                          ..sort(
-                                            (a, b) => a.key
-                                                .toString()
-                                                .compareTo(
-                                                    b.key.toString()),
-                                          );
-
-                                    for (var entry in sortedReadings) {
-                                      if (entry.value is Map<dynamic, dynamic>) {
-                                        final reading =
-                                            entry.value as Map<dynamic, dynamic>;
-                                        double hr =
-                                            (reading['heartRate'] ?? 0)
-                                                .toDouble();
-                                        double ox =
-                                            (reading['oxygen'] ?? 0)
-                                                .toDouble();
-                                        double sbp =
-                                            (reading['sbp'] ?? 0).toDouble();
-                                        double dbp =
-                                            (reading['dbp'] ?? 0).toDouble();
-
-                                        if (hr > 0) {
-                                          heartRateData.add(
-                                            FlSpot(timeCounter.toDouble(), hr),
-                                          );
-                                          totalHeartRate += hr;
-                                          validHeartRateReadings++;
-                                        } else {
-                                          heartRateData.add(
-                                            FlSpot(timeCounter.toDouble(), 0),
-                                          );
-                                        }
-                                        if (ox > 0) {
-                                          oxygenData.add(
-                                            FlSpot(timeCounter.toDouble(), ox),
-                                          );
-                                          totalOxygen += ox;
-                                          validOxygenReadings++;
-                                        }
-                                        if (sbp > 0) {
-                                          sbpData.add(
-                                            FlSpot(timeCounter.toDouble(), sbp),
-                                          );
-                                          totalSbp += sbp;
-                                          validSbpReadings++;
-                                        } else {
-                                          sbpData.add(
-                                            FlSpot(timeCounter.toDouble(), 0),
-                                          );
-                                        }
-                                        if (dbp > 0) {
-                                          dbpData.add(
-                                            FlSpot(timeCounter.toDouble(), dbp),
-                                          );
-                                          totalDbp += dbp;
-                                          validDbpReadings++;
-                                        } else {
-                                          dbpData.add(
-                                            FlSpot(timeCounter.toDouble(), 0),
-                                          );
-                                        }
-                                        timeCounter++;
-                                      }
-                                    }
-                                  }
-
-                                  double avgHeartRate =
-                                      validHeartRateReadings > 0
-                                          ? totalHeartRate /
-                                              validHeartRateReadings
-                                          : 0;
-                                  double avgOxygen =
-                                      validOxygenReadings > 0
-                                          ? totalOxygen /
-                                              validOxygenReadings
-                                          : 0;
-                                  double avgSbp =
-                                      validSbpReadings > 0
-                                          ? totalSbp / validSbpReadings
-                                          : 0;
-                                  double avgDbp =
-                                      validDbpReadings > 0
-                                          ? totalDbp / validDbpReadings
-                                          : 0;
-                                  double sessionHRV = 0;
-                                  if (questionnaire != null &&
-                                      questionnaire['hrv'] != null) {
-                                    sessionHRV =
-                                        (questionnaire['hrv'] as num)
-                                            .toDouble();
-                                  }
-
-                                  return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      const SizedBox(height: 18),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 10,
-                                        ),
+                                items:
+                                    sessionsWithData.map((sessionId) {
+                                      return DropdownMenuItem<String>(
+                                        value: sessionId,
                                         child: Text(
-                                          'Session Summary',
-                                          style: TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white.withOpacity(0.95),
-                                            letterSpacing: 0.5,
+                                          formatSessionId(sessionId),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                      ),
-                                      buildModernScoreboard(
-                                        avgHeartRate: avgHeartRate,
-                                        avgOxygen: avgOxygen,
-                                        avgSbp: avgSbp,
-                                        avgDbp: avgDbp,
-                                        sessionHRV: sessionHRV,
-                                      ),
-                                      const SizedBox(height: 24),
-                                      buildGraph(
-                                        'Heart Rate (BPM)',
-                                        heartRateData,
-                                        Colors.red,
-                                      ),
-                                      const SizedBox(height: 24),
-                                      buildGraph(
-                                        'Blood Oxygen (%)',
-                                        oxygenData,
-                                        Colors.blue,
-                                      ),
-                                      const SizedBox(height: 24),
-                                      buildGraph(
-                                        'Systolic BP (mmHg)',
-                                        sbpData,
-                                        Colors.orange,
-                                      ),
-                                      const SizedBox(height: 24),
-                                      buildGraph(
-                                        'Diastolic BP (mmHg)',
-                                        dbpData,
-                                        Colors.deepOrange,
-                                      ),
-                                      if (questionnaire != null) ...[
-                                        const SizedBox(height: 32),
-                                        buildQuestionnaireCard(questionnaire),
-                                      ],
-                                    ],
-                                  );
+                                      );
+                                    }).toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    selectedSessionId = value;
+                                  });
                                 },
                               ),
-                          ],
-                        ),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                          if (selectedSessionId != null)
+                            Builder(
+                              builder: (context) {
+                                final sessionData =
+                                    historicalData[selectedSessionId!]
+                                        as Map<String, dynamic>;
+                                final readings =
+                                    sessionData['readings']
+                                        as Map<dynamic, dynamic>?;
+                                final questionnaire =
+                                    sessionData['questionnaire']
+                                        as Map<dynamic, dynamic>?;
+
+                                List<FlSpot> heartRateData = [];
+                                List<FlSpot> oxygenData = [];
+                                List<FlSpot> sbpData = [];
+                                List<FlSpot> dbpData = [];
+                                int timeCounter = 0;
+
+                                double totalHeartRate = 0,
+                                    totalOxygen = 0,
+                                    totalSbp = 0,
+                                    totalDbp = 0;
+                                int validHeartRateReadings = 0,
+                                    validOxygenReadings = 0,
+                                    validSbpReadings = 0,
+                                    validDbpReadings = 0;
+
+                                if (readings != null) {
+                                  var sortedReadings =
+                                      readings.entries.toList()..sort(
+                                        (a, b) => a.key.toString().compareTo(
+                                          b.key.toString(),
+                                        ),
+                                      );
+
+                                  for (var entry in sortedReadings) {
+                                    if (entry.value is Map<dynamic, dynamic>) {
+                                      final reading =
+                                          entry.value as Map<dynamic, dynamic>;
+                                      double hr =
+                                          (reading['heartRate'] ?? 0)
+                                              .toDouble();
+                                      double ox =
+                                          (reading['oxygen'] ?? 0).toDouble();
+                                      double sbp =
+                                          (reading['sbp'] ?? 0).toDouble();
+                                      double dbp =
+                                          (reading['dbp'] ?? 0).toDouble();
+
+                                      if (hr > 0) {
+                                        heartRateData.add(
+                                          FlSpot(timeCounter.toDouble(), hr),
+                                        );
+                                        totalHeartRate += hr;
+                                        validHeartRateReadings++;
+                                      } else {
+                                        heartRateData.add(
+                                          FlSpot(timeCounter.toDouble(), 0),
+                                        );
+                                      }
+                                      if (ox > 0) {
+                                        oxygenData.add(
+                                          FlSpot(timeCounter.toDouble(), ox),
+                                        );
+                                        totalOxygen += ox;
+                                        validOxygenReadings++;
+                                      }
+                                      if (sbp > 0) {
+                                        sbpData.add(
+                                          FlSpot(timeCounter.toDouble(), sbp),
+                                        );
+                                        totalSbp += sbp;
+                                        validSbpReadings++;
+                                      } else {
+                                        sbpData.add(
+                                          FlSpot(timeCounter.toDouble(), 0),
+                                        );
+                                      }
+                                      if (dbp > 0) {
+                                        dbpData.add(
+                                          FlSpot(timeCounter.toDouble(), dbp),
+                                        );
+                                        totalDbp += dbp;
+                                        validDbpReadings++;
+                                      } else {
+                                        dbpData.add(
+                                          FlSpot(timeCounter.toDouble(), 0),
+                                        );
+                                      }
+                                      timeCounter++;
+                                    }
+                                  }
+                                }
+
+                                double avgHeartRate =
+                                    validHeartRateReadings > 0
+                                        ? totalHeartRate /
+                                            validHeartRateReadings
+                                        : 0;
+                                double avgOxygen =
+                                    validOxygenReadings > 0
+                                        ? totalOxygen / validOxygenReadings
+                                        : 0;
+                                double avgSbp =
+                                    validSbpReadings > 0
+                                        ? totalSbp / validSbpReadings
+                                        : 0;
+                                double avgDbp =
+                                    validDbpReadings > 0
+                                        ? totalDbp / validDbpReadings
+                                        : 0;
+                                double sessionHRV = 0;
+                                if (questionnaire != null &&
+                                    questionnaire['hrv'] != null) {
+                                  sessionHRV =
+                                      (questionnaire['hrv'] as num).toDouble();
+                                }
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    const SizedBox(height: 18),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                      ),
+                                      child: Text(
+                                        'Session Summary',
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white.withOpacity(0.95),
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                    buildModernScoreboard(
+                                      avgHeartRate: avgHeartRate,
+                                      avgOxygen: avgOxygen,
+                                      avgSbp: avgSbp,
+                                      avgDbp: avgDbp,
+                                      sessionHRV: sessionHRV,
+                                      stressScore:
+                                          questionnaire != null &&
+                                                  questionnaire['stressScore'] !=
+                                                      null
+                                              ? (questionnaire['stressScore']
+                                                      as num)
+                                                  .toDouble()
+                                              : 0,
+                                    ),
+                                    const SizedBox(height: 24),
+                                    buildGraph(
+                                      'Heart Rate (BPM)',
+                                      heartRateData,
+                                      Colors.red,
+                                    ),
+                                    const SizedBox(height: 24),
+                                    buildGraph(
+                                      'Blood Oxygen (%)',
+                                      oxygenData,
+                                      Colors.blue,
+                                    ),
+                                    const SizedBox(height: 24),
+                                    buildGraph(
+                                      'Systolic BP (mmHg)',
+                                      sbpData,
+                                      Colors.orange,
+                                    ),
+                                    const SizedBox(height: 24),
+                                    buildGraph(
+                                      'Diastolic BP (mmHg)',
+                                      dbpData,
+                                      Colors.deepOrange,
+                                    ),
+                                    if (questionnaire != null) ...[
+                                      const SizedBox(height: 32),
+                                      buildQuestionnaireCard(questionnaire),
+                                    ],
+                                  ],
+                                );
+                              },
+                            ),
+                        ],
                       ),
                     ),
                   ),
+                ),
       ),
     );
   }

@@ -139,6 +139,7 @@ void setup()
 
 void loop()
 {
+  
   if (!recording)
   {
     delay(100);

@@ -1,11 +1,170 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:CalmPetitor/fuzzy/fuzzy_stress.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/material.dart';
+import 'package:CalmPetitor/pages/video_player_screen.dart';
+
+class StressScoreDialog extends StatelessWidget {
+  final double stressScore;
+
+  const StressScoreDialog({Key? key, required this.stressScore})
+    : super(key: key);
+
+  String get stressLevel {
+    if (stressScore < 3.5) return "Low";
+    if (stressScore < 6.5) return "Medium";
+    return "High";
+  }
+
+  Color get stressColor {
+    if (stressScore < 3.5) return Colors.green;
+    if (stressScore < 6.5) return Colors.orange;
+    return Colors.red;
+  }
+
+  List<Map<String, String>> getRecommendations() {
+    switch (stressLevel) {
+      case "Low":
+        return [
+          {"title": "Motivation to Work", "videoId": "jrIS_RQJmCU"},
+          {
+            "title": "5-Minute Meditation for Stress Relief",
+            "videoId": "inpok4MKVLM",
+          },
+          {"title": "10-Minute Stress Relief Yoga", "videoId": "sTANio_2E0Q"},
+        ];
+      case "Medium":
+        return [
+          {
+            "title": "Guided Meditation for Anxiety & Stress",
+            "videoId": "O-6f5wQXSu8",
+          },
+          {"title": "Box Breathing Technique", "videoId": "tEmt1Znux58"},
+          {"title": "Progressive Muscle Relaxation", "videoId": "86HUcX8ZtAk"},
+        ];
+      case "High":
+        return [
+          {"title": "Sleep Meditation for Anxiety", "videoId": "acLUWBuAvms"},
+          {
+            "title": "Guided Meditation for Anxiety & Stress",
+            "videoId": "O-6f5wQXSu8",
+          },
+          {"title": "4-7-8 Breathing Exercise", "videoId": "PmBYdfv5RSk"},
+        ];
+      default:
+        return [];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recommendations = getRecommendations();
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Icon(Icons.self_improvement, color: stressColor, size: 32),
+          const SizedBox(width: 12),
+          Text('Your Stress Score', style: TextStyle(color: stressColor)),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            stressScore.toStringAsFixed(2),
+            style: TextStyle(
+              fontSize: 48,
+              fontWeight: FontWeight.bold,
+              color: stressColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Stress Level: $stressLevel',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: stressColor,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _getAdvice(stressLevel),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16),
+          ),
+          const SizedBox(height: 16),
+          if (recommendations.isNotEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Recommended videos for you:",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                ...recommendations.map(
+                  (rec) => ListTile(
+                    leading: const Icon(
+                      Icons.play_circle_fill,
+                      color: Colors.red,
+                      size: 32,
+                    ),
+                    title: Text(
+                      rec['title'] ?? "",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        color: Colors.blueAccent,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.of(context).pop(); // Close dialog
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder:
+                              (context) =>
+                                  VideoPlayerScreen(videoId: rec['videoId']!),
+                        ),
+                      );
+                    },
+                    contentPadding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          child: const Text('OK', style: TextStyle(fontSize: 18)),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
+
+  String _getAdvice(String level) {
+    switch (level) {
+      case "Low":
+        return "Great job! Keep maintaining your healthy habits.";
+      case "Medium":
+        return "You're doing okay, but consider some relaxation or mindfulness.";
+      case "High":
+        return "High stress detected. Take a break, breathe, and look after yourself.";
+      default:
+        return "";
+    }
+  }
+}
 
 class LiveSensorData extends StatefulWidget {
   const LiveSensorData({Key? key}) : super(key: key);
@@ -100,12 +259,6 @@ class _LiveSensorDataState extends State<LiveSensorData> {
         return;
       }
       final jsonStr = utf8.decode(value);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("BLE: $jsonStr"),
-          duration: Duration(seconds: 5),
-        ),
-      );
       final data = json.decode(jsonStr);
       readingsCount++;
       if (readingsCount <= 0) return;
@@ -115,10 +268,14 @@ class _LiveSensorDataState extends State<LiveSensorData> {
         double sbp = (data['sbp'] ?? 0).toDouble();
         double dbp = (data['dbp'] ?? 0).toDouble();
         double spo2 = (data['oxygen'] ?? 0).toDouble();
+
         heartRateData.add(FlSpot(chartTime.toDouble(), hr));
         sbpData.add(FlSpot(chartTime.toDouble(), sbp));
         dbpData.add(FlSpot(chartTime.toDouble(), dbp));
-        oxygenData.add(FlSpot(chartTime.toDouble(), spo2));
+        // Only add valid SpO2 readings
+        if (spo2 >= 50) {
+          oxygenData.add(FlSpot(chartTime.toDouble(), spo2));
+        }
         chartTime++;
         if (heartRateData.length > 100) heartRateData.removeAt(0);
         if (sbpData.length > 100) sbpData.removeAt(0);
@@ -366,6 +523,16 @@ class _LiveSensorDataState extends State<LiveSensorData> {
                   onPressed: () async {
                     final user = FirebaseAuth.instance.currentUser;
                     if (user == null || sessionId.isEmpty) return;
+                    final fuzzy = FuzzyStress();
+                    final stressScore = fuzzy.computeStress(
+                      hr: averageHeartRate,
+                      sleepScore: sleepQuality.toDouble(),
+                      hadCoffee: hadCoffee,
+                      spo2: averageOxygen,
+                      hrv: sessionHRV,
+                      sbp: averageSBP,
+                      dbp: averageDBP,
+                    );
                     final questionnaireData = {
                       'stressLevel': stressLevel,
                       'hadCoffee': hadCoffee,
@@ -378,6 +545,7 @@ class _LiveSensorDataState extends State<LiveSensorData> {
                       'averageDBP': averageDBP,
                       'averageOxygen': averageOxygen,
                       'hrv': sessionHRV,
+                      'stressScore': stressScore,
                       'timestamp': ServerValue.timestamp,
                     };
                     final databaseRef = FirebaseDatabase.instance.ref().child(
@@ -388,28 +556,9 @@ class _LiveSensorDataState extends State<LiveSensorData> {
                     Navigator.of(context).pop();
                     showDialog(
                       context: context,
-                      builder: (BuildContext context) {
-                        return AlertDialog(
-                          title: Row(
-                            children: const [
-                              Icon(Icons.check_circle, color: Colors.green),
-                              SizedBox(width: 10),
-                              Text('Success'),
-                            ],
-                          ),
-                          content: const Text(
-                            'Your session data has been saved successfully.',
-                          ),
-                          actions: <Widget>[
-                            TextButton(
-                              child: const Text('OK'),
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                              },
-                            ),
-                          ],
-                        );
-                      },
+                      builder:
+                          (context) =>
+                              StressScoreDialog(stressScore: stressScore),
                     );
                   },
                 ),
