@@ -134,7 +134,7 @@ void setup()
   particleSensor.setPulseAmplitudeGreen(0);
   for (byte i = 0; i < RATE_SIZE; i++)
     rates[i] = 75;
-  beatAvg = 75;
+  beatAvg = 0;
 }
 
 void loop()
@@ -243,8 +243,8 @@ void loop()
   unsigned long currentTime = millis();
   if (currentTime - lastDataSentTime >= 1000)
   {
-    float estimatedSBP = 120 + (pulseAmplitude * 0.005) - (pulseWidth * 0.05) + (filteredBPM * 0.2);
-    float estimatedDBP = 80 + (pulseAmplitude * 0.002) - (pulseWidth * 0.02) + (filteredBPM * 0.1);
+    float estimatedSBP = 115 + (pulseAmplitude * 0.004) - (pulseWidth * 0.04) + (filteredBPM * 0.15);
+float estimatedDBP = 75 + (pulseAmplitude * 0.0015) - (pulseWidth * 0.015) + (filteredBPM * 0.08);
 
     String data = String("{\"heartRate\":") + String(filteredBPM, 1) +
                   ",\"avgHeartRate\":" + String(beatAvg, 1) +
@@ -262,7 +262,7 @@ void loop()
 void resetHRValues()
 {
   beatsPerMinute = 0;
-  beatAvg = 75;
+  beatAvg = 0;
   filteredBPM = 0;
   for (byte i = 0; i < RATE_SIZE; i++)
     rates[i] = 75;
