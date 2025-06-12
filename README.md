@@ -13,5 +13,5 @@ The hardware involves and ESP32 and a sparkfun Photodetetor MAX3010 wired in the
 | GPIO21        | SDA              | I2C Data Line            |
 | GPIO22        | SCL              | I2C Clock Line           |
 
-The App is currently designed only to work with an iphone however, due to legal issues it is not available publicly. Should you want access, use the following link: https://testflight.apple.com/join/cHH6Dh8j and follow the steps provided
+The App is currently designed only to work with an iphone however, due to legal obstacles it is not available publicly. Should you want access, use the following link: https://testflight.apple.com/join/cHH6Dh8j and follow the steps provided
 
