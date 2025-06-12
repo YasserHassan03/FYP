@@ -164,9 +164,9 @@ class _ZenCornerState extends State<ZenCorner>
                     description: "Progressive body relaxation for better sleep",
                   ),
                   VideoItem(
-                    title: "Bedtime Breathing Techniques",
-                    videoId: "1Ebd2AJ2jq4", // Changed to a working video ID
-                    description: "Breathing exercises to do before bed",
+                    title: "Guided Sleep Meditation",
+                    videoId: "U6Ay9v7gK9w", // Changed to a working video ID
+                    description: "Guided meditation to help you sleep",
                   ),
                 ],
               ),
